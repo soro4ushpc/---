@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jobly - سایت کاریابی</title>
+<style>
+body{font-family:tahoma,sans-serif;margin:0;padding:0;background:#f5f5f5;color:#333}
+header{background:#2c3e50;color:white;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+header h1{margin:0;font-size:24px}
+nav a{color:white;text-decoration:none;margin:0 10px;cursor:pointer}
+nav a:hover{text-decoration:underline}
+.container{padding:20px}
+.card{background:white;padding:15px;margin:10px 0;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1)}
+button{padding:5px 10px;border:none;border-radius:5px;background:#3498db;color:white;cursor:pointer}
+button:hover{background:#2980b9}
+input,select,textarea{padding:5px;margin:5px 0;border-radius:5px;border:1px solid #ccc;width:100%;box-sizing:border-box}
+.page{display:none}
+img{max-width:200px;border:1px solid #ccc;padding:3px;border-radius:5px;margin-top:5px;}
+</style>
+</head>
+<body>
+
+<header>
+<h1>Jobly</h1>
+<nav>
+<a onclick="showPage('home')">خانه</a>
+<a onclick="showPage('jobs')">شغل‌ها</a>
+<a onclick="showPage('addJob')">ثبت شغل</a>
+<a onclick="showPage('dashboard')">داشبورد</a>
+<a onclick="showPage('login')">ورود/ثبت‌نام</a>
+</nav>
+</header>
+
+<div class="container">
+
+<div id="home" class="page">
+<h2>خوش آمدید به Jobly</h2>
+<p>سایت کاریابی ایرانی برای کارجوها و کارفرماها</p>
+</div>
+
+<div id="jobs" class="page">
+<h2>لیست شغل‌ها</h2>
+<input type="text" id="searchJob" placeholder="جستجو بر اساس عنوان" oninput="filterJobs()">
+<select id="filterCategory" onchange="filterJobs()"></select>
+<input type="number" id="minSalary" placeholder="حداقل حقوق" oninput="filterJobs()">
+<input type="number" id="maxSalary" placeholder="حداکثر حقوق" oninput="filterJobs()">
+<input type="number" id="maxPrice" placeholder="حداکثر قیمت پیشنهادی کارجو" oninput="filterJobs()">
+<select id="filterSalary" onchange="filterJobs()">
+<option value="">مرتب‌سازی حقوق</option>
+<option value="high">بیشترین</option>
+<option value="low">کمترین</option>
+</select>
+<div id="jobList"></div>
+</div>
+
+<div id="addJob" class="page">
+<h2>ثبت شغل جدید</h2>
+<input type="text" id="jobTitle" placeholder="عنوان شغل">
+<textarea id="jobDesc" placeholder="توضیحات شغل"></textarea>
+<select id="jobCategory"></select>
+<input type="text" id="jobHours" placeholder="ساعت کاری (مثلا 9-17)">
+<textarea id="jobConditions" placeholder="شرایط کاری"></textarea>
+<input type="number" id="jobSalary" placeholder="حقوق (تومان)">
+<button onclick="addJob()">ثبت شغل</button>
+</div>
+
+<div id="dashboard" class="page">
+<h2>داشبورد</h2>
+<div id="dashboardContent"></div>
+</div>
+
+<div id="login" class="page">
+<h2>ورود/ثبت‌نام</h2>
+<input type="text" id="username" placeholder="نام کاربری">
+<input type="password" id="password" placeholder="رمز عبور">
+<select id="roleSelect">
+<option value="jobseeker">کارجو</option>
+<option value="employer">کارفرما</option>
+</select>
+<input type="file" id="resumeInput" accept="image/*">
+<button onclick="login()">ورود/ثبت‌نام</button>
+</div>
+
+</div>
+
+<script>
+// داده‌ها و ذخیره‌سازی
+let users=JSON.parse(localStorage.getItem('users')||'[]');
+let currentUser=JSON.parse(localStorage.getItem('currentUser')||'null');
+let jobs=JSON.parse(localStorage.getItem('jobs')||'[]');
+let requests=JSON.parse(localStorage.getItem('requests')||'[]');
+
+function saveUsers(){localStorage.setItem('users',JSON.stringify(users))}
+function saveJobs(){localStorage.setItem('jobs',JSON.stringify(jobs))}
+function saveRequests(){localStorage.setItem('requests',JSON.stringify(requests))}
+
+// مدیریت صفحات
+function showPage(id){document.querySelectorAll('.page').forEach(p=>p.style.display='none');document.getElementById(id).style.display='block'}
+
+// گزینه‌های دسته‌بندی
+let categories=['IT','Marketing','Design','Finance','HR','Sales','Education','Healthcare','Engineering','Legal','Others'];
+function renderCategoryOptions(){
+  let select=document.getElementById('jobCategory'); select.innerHTML=''; categories.forEach(c=>{let opt=document.createElement('option'); opt.value=c; opt.text=c; select.appendChild(opt);});
+  let filter=document.getElementById('filterCategory'); filter.innerHTML='<option value="">همه دسته‌ها</option>'; categories.forEach(c=>{let opt=document.createElement('option'); opt.value=c; opt.text=c; filter.appendChild(opt);});
+}
+renderCategoryOptions();
+
+// ثبت‌نام / ورود
+function login(){
+  let name=document.getElementById('username').value.trim();
+  let pass=document.getElementById('password').value.trim();
+  let role=document.getElementById('roleSelect').value;
+  if(!name || !pass){alert('نام کاربری و رمز لازم است!'); return;}
+  let user=users.find(u=>u.name===name);
+  if(!user){
+    let resume='';
+    if(role==='jobseeker'){
+      let file=document.getElementById('resumeInput').files[0];
+      if(!file){alert('کارجو باید رزومه ثبت کند!'); return;}
+      let reader=new FileReader();
+      reader.onload=e=>{resume=e.target.result; createUser(name,pass,role,resume);}
+      reader.readAsDataURL(file);
+    } else {createUser(name,pass,role,resume);}
+  } else {
+    if(user.password!==pass){alert('رمز اشتباه است!'); return;}
+    currentUser=user; localStorage.setItem('currentUser',JSON.stringify(currentUser));
+    alert('ورود با نام کاربری '+currentUser.name+' انجام شد!'); showPage('home'); renderJobs(); renderDashboard();
+  }
+}
+function createUser(name,pass,role,resume){
+  let user={id:Date.now(),name:name,password:pass,role:role,resume:resume};
+  users.push(user); saveUsers();
+  currentUser=user; localStorage.setItem('currentUser',JSON.stringify(currentUser));
+  alert('ثبت‌نام با موفقیت انجام شد!'); showPage('home'); renderJobs(); renderDashboard();
+}
+
+// گرفتن رزومه
+function getResumeBase64(callback){
+  if(currentUser && currentUser.resume){callback(currentUser.resume);}
+  else {callback(null);}
+}
+
+// ثبت شغل
+function addJob(){
+  if(!currentUser || currentUser.role!=='employer'){alert('فقط کارفرما می‌تواند شغل ثبت کند!'); return;}
+  let title=document.getElementById('jobTitle').value.trim();
+  let desc=document.getElementById('jobDesc').value.trim();
+  let category=document.getElementById('jobCategory').value;
+  let hours=document.getElementById('jobHours').value.trim();
+  let conditions=document.getElementById('jobConditions').value.trim();
+  let salary=parseFloat(document.getElementById('jobSalary').value);
+  if(!title || !desc || !category || !hours || !conditions || isNaN(salary)){alert('لطفاً تمام فیلدها را پر کنید!'); return;}
+  let job={id:Date.now(),title:title,desc:desc,category:category,hours:hours,conditions:conditions,salary:salary,employerId:currentUser.id};
+  jobs.push(job); saveJobs(); renderJobs(); alert('شغل ثبت شد!');
+  document.getElementById('jobTitle').value=''; document.getElementById('jobDesc').value=''; document.getElementById('jobHours').value=''; document.getElementById('jobConditions').value=''; document.getElementById('jobSalary').value='';
+}
+
+// ارسال درخواست
+function sendRequest(jobId){
+  let job=jobs.find(j=>j.id===jobId);
+  if(!job){alert('شغل یافت نشد!'); return;}
+  if(!currentUser || currentUser.role!=='jobseeker'){alert('فقط کارجو می‌تواند درخواست دهد!'); return;}
+  getResumeBase64(resumeData=>{
+    if(!resumeData){alert('رزومه شما ثبت نشده است!'); return;}
+    let price=parseFloat(prompt('قیمت پیشنهادی شما برای این شغل (تومان):',''));
+    if(isNaN(price) || price<=0){alert('قیمت معتبر وارد کنید!'); return;}
+    let message=prompt('پیام خود را به کارفرما وارد کنید (اختیاری):','من حاضرم این شغل را بپذیرم');
+    let req={id:Date.now(),jobId:jobId,jobseekerId:currentUser.id,resume:resumeData,message:message||'',status:'ارسال شده',price:price};
+    requests.push(req); saveRequests(); alert('درخواست ارسال شد!'); renderDashboard();
+  });
+}
+
+// فیلتر شغل‌ها
+function filterJobs(){
+  let s=document.getElementById('searchJob').value.toLowerCase();
+  let c=document.getElementById('filterCategory').value;
+  let minS=parseFloat(document.getElementById('minSalary').value)||0;
+  let maxS=parseFloat(document.getElementById('maxSalary').value)||Infinity;
+  let sortS=document.getElementById('filterSalary').value;
+  let maxPrice=parseFloat(document.getElementById('maxPrice')?.value)||Infinity;
+  let filtered = jobs.filter(j=>{
+    let titleMatch=j.title.toLowerCase().includes(s);
+    let catMatch=(c=='' || j.category==c);
+    let salaryMatch=(j.salary>=minS && j.salary<=maxS);
+    if(currentUser && currentUser.role==='employer'){
+      let jobRequests=requests.filter(r=>r.jobId===j.id && r.price<=maxPrice);
+      return titleMatch && catMatch && salaryMatch && jobRequests.length>0;
+    }
+    return titleMatch && catMatch && salaryMatch;
+  });
+  if(sortS==='high') filtered.sort((a,b)=>b.salary-a.salary);
+  if(sortS==='low') filtered.sort((a,b)=>a.salary-b.salary);
+  let list=document.getElementById('jobList'); list.innerHTML='';
+  filtered.forEach(job=>{
+    let employer=users.find(u=>u.id===job.employerId);
+    let div=document.createElement('div'); div.className='card';
+    div.innerHTML=`<h3>${job.title}</h3><p>${job.desc}</p><p>دسته: ${job.category}</p><p>ساعت کاری: ${job.hours}</p><p>شرایط: ${job.conditions}</p><p>حقوق: ${job.salary}</p><p>کارفرما: ${employer ? employer.name : 'ناشناخته'}</p>`;
+    if(currentUser && currentUser.role==='jobseeker'){let btn=document.createElement('button'); btn.innerText='ارسال درخواست'; btn.onclick=()=>sendRequest(job.id); div.appendChild(btn);}
+    list.appendChild(div);
+  });
+}
+
+// داشبورد
+function renderDashboard(){
+  let dash=document.getElementById('dashboardContent'); dash.innerHTML='';
+  if(!currentUser){dash.innerHTML='<p>برای مشاهده داشبورد باید وارد شوید.</p>'; return;}
+  if(currentUser.role==='employer'){
+    dash.innerHTML+='<h3>شغل‌های شما</h3>';
+    jobs.filter(j=>j.employerId===currentUser.id).forEach(job=>{
+      dash.innerHTML+=`<div class="card"><h4>${job.title}</h4><p>${job.desc}</p><p>دسته: ${job.category}</p><p>ساعت کاری: ${job.hours}</p><p>شرایط: ${job.conditions}</p><p>حقوق: ${job.salary}</p><h5>درخواست‌ها:</h5>`;
+      requests.filter(r=>r.jobId===job.id).forEach(r=>{
+        let seeker=users.find(u=>u.id===r.jobseekerId);
+        dash.innerHTML+=`<div class="card"><p>کارجو: ${seeker ? seeker.name : 'ناشناخته'}</p><p>پیام: ${r.message}</p><p>رزومه:</p><img src="${r.resume}" style="max-width:150px;"><p>وضعیت: ${r.status}</p><p>قیمت پیشنهادی: ${r.price}</p><button onclick="updateRequestStatus(${r.id},'قبول شد')">قبول</button><button onclick="updateRequestStatus(${r.id},'رد شد')">رد</button></div>`;
+      });
+      dash.innerHTML+='</div>';
+    });
+  }
+  if(currentUser.role==='jobseeker'){
+    dash.innerHTML+='<h3>درخواست‌های شما</h3>';
+    requests.filter(r=>r.jobseekerId===currentUser.id).forEach(r=>{
+      let job=jobs.find(j=>j.id===r.jobId);
+      let employer=users.find(u=>u.id===job.employerId);
+      dash.innerHTML+=`<div class="card"><h4>${job.title}</h4><p>کارفرما: ${employer ? employer.name : 'ناشناخته'}</p><p>پیام: ${r.message}</p><p>رزومه شما:</p><img src="${r.resume}" style="max-width:150px;"><p>وضعیت: ${r.status}</p><p>قیمت پیشنهادی: ${r.price}</p></div>`;
+    });
+  }
+}
+
+// تغییر وضعیت درخواست
+function updateRequestStatus(id,status){let r=requests.find(r=>r.id===id); if(r){r.status=status; saveRequests(); renderDashboard();}}
+
+// نمایش اولیه
+showPage('home'); renderJobs(); renderDashboard();
+</script>
+
+</body>
+</html>
